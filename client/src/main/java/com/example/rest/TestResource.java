@@ -64,23 +64,40 @@ public class TestResource {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Blocking
-    public Results test() {
+    @Path("/rest")
+    public Results testRest() {
         Results results = new Results();
+
+        // warm-up
+        System.out.println("starting rest warm-up");
+        testRest(TEST_SIZE);
+        long start = System.currentTimeMillis();
+        System.out.println("starting rest test");
+        testRest(TEST_SIZE);
+        results.restTime = System.currentTimeMillis() - start;
+
+        System.out.println("done");
+
+        return results;
+    }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Blocking
+    @Path("/grpc")
+    public Results testGrpc() {
+        Results results = new Results();
+
         // warm-up
         System.out.println("starting grpc warm-up");
-        testGrpc(10000);
+        testGrpc(TEST_SIZE);
         System.out.println("starting grpc test");
         long start = System.currentTimeMillis();
         testGrpc(TEST_SIZE);
         results.grpcTime = System.currentTimeMillis() - start;
 
-        // warm-up
-        System.out.println("starting rest warm-up");
-        testRest(10000);
-        start = System.currentTimeMillis();
-        System.out.println("starting rest test");
-        testRest(TEST_SIZE);
-        results.restTime = System.currentTimeMillis() - start;
+
+        System.out.println("done");
 
         return results;
     }
@@ -102,26 +119,6 @@ public class TestResource {
         } catch (InterruptedException e) {
             throw new RuntimeException("Failed waiting for all grpc calls to be finished");
         }
-
-
-//        CountDownLatch countDown = new CountDownLatch(calls);
-//        RestClient client = RestClientBuilder.newBuilder().baseUri(URI.create("http://localhost:8080"))
-//                .build(RestClient.class);
-//        for (int i = 0; i < calls; i++) {
-//            client.request(restRequest).thenRun(() -> {
-//                countDown.countDown();
-//                System.out.print(".");
-//            }).exceptionally(error -> {
-//                System.out.println("error!");
-//                error.printStackTrace();
-//                return null;
-//            });
-//        }
-//        try {
-//            countDown.await();
-//        } catch (InterruptedException e) {
-//            throw new RuntimeException("Failed waiting for all grpc calls to be finished");
-//        }
     }
 
     private void testGrpc(int calls) {
