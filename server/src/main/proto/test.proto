@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package tutorial;
+
+option java_multiple_files = true;
+option java_package = "com.example.grpcbench";
+
+service Consumer {
+  rpc Consume(RecordList) returns (RecordList);
+}
+
+message RecordList {
+  string name = 1;
+  repeated Record  records = 2;
+}
+
+message Record {
+  string message = 1;
+  string comment = 2;
+}
