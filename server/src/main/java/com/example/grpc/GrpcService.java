@@ -36,13 +36,9 @@ public class GrpcService extends MutinyConsumerGrpc.ConsumerImplBase {
 
         Multi<RecordList> result = Multi.createFrom().<RecordList>emitter(emitter::complete, BackPressureStrategy.BUFFER);
         emitter.thenAccept(
-                multiEmitter ->
-                        requestList
-                                .onCompletion().invoke(multiEmitter::complete)
-                                .subscribe().with(recordList -> {
-                                    multiEmitter.emit(response);
-                                }
-                        )
+                multiEmitter -> requestList
+                        .onCompletion().invoke(multiEmitter::complete)
+                        .subscribe().with(recordList -> multiEmitter.emit(response))
         );
         return result;
     }
