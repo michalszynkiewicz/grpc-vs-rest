@@ -5,7 +5,10 @@ import com.example.grpcbench.Record;
 import com.example.grpcbench.RecordList;
 import io.quarkus.grpc.GrpcClient;
 import io.smallrye.common.annotation.Blocking;
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.BackPressureStrategy;
+import io.smallrye.mutiny.subscription.MultiEmitter;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.eclipse.microprofile.rest.client.RestClientBuilder;
 import org.jboss.resteasy.reactive.client.impl.ClientBuilderImpl;
@@ -26,8 +29,10 @@ import javax.ws.rs.core.MediaType;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 
 @Path("/test")
 @Singleton
@@ -85,7 +90,7 @@ public class TestResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Blocking
     @Path("/grpc")
-    public Results testGrpc() {
+    public Results testGrpc() throws InterruptedException {
         Results results = new Results();
 
         // warm-up
@@ -94,6 +99,27 @@ public class TestResource {
         System.out.println("starting grpc test");
         long start = System.currentTimeMillis();
         testGrpc(TEST_SIZE);
+        results.grpcTime = System.currentTimeMillis() - start;
+
+
+        System.out.println("done");
+
+        return results;
+    }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Blocking
+    @Path("/grpc-stream")
+    public Results testGrpcStream() throws InterruptedException {
+        Results results = new Results();
+
+        // warm-up
+        System.out.println("starting grpc warm-up");
+        testGrpcStream(TEST_SIZE);
+        System.out.println("starting grpc test");
+        long start = System.currentTimeMillis();
+        testGrpcStream(TEST_SIZE);
         results.grpcTime = System.currentTimeMillis() - start;
 
 
@@ -121,17 +147,49 @@ public class TestResource {
         }
     }
 
-    private void testGrpc(int calls) {
+    private void testGrpc(int calls) throws InterruptedException {
         CountDownLatch countDown = new CountDownLatch(calls);
+        Semaphore throttlingSemaphore = new Semaphore(10000);
         for (int j = 0; j < calls; j++) {
+            throttlingSemaphore.acquire();
             Uni<RecordList> response = grpcClient.consume(grpcRequest);
             response.subscribe().with(result -> {
-                if (result.getRecordsCount() != 10) {
+                if (result.getRecordsCount() != 100) {
                     System.out.println("Wrong result count!");
                 }
+                throttlingSemaphore.release();
                 countDown.countDown();
             });
         }
+        try {
+            countDown.await();
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Failed waiting for all grpc calls to be finished");
+        }
+    }
+
+    // mstodo test for it
+    private void testGrpcStream(int calls) throws InterruptedException {
+        CountDownLatch countDown = new CountDownLatch(calls);
+        CompletableFuture<MultiEmitter<? super RecordList>> emitter = new CompletableFuture<>();
+        Multi<RecordList> result = Multi.createFrom().<RecordList>emitter(emitter::complete, BackPressureStrategy.BUFFER);
+        grpcClient.consumeStream(result)
+                .subscribe().with(recordList -> {
+            if (recordList.getRecordsCount() != 100) {
+                System.out.println("Wrong result count!");
+            }
+            countDown.countDown();
+        });
+
+        emitter.thenAccept(
+                multiEmitter -> {
+                    for (int i = 0; i < calls; i++) {
+                        multiEmitter.emit(grpcRequest);
+                    }
+                    multiEmitter.complete();
+                }
+        );
+
         try {
             countDown.await();
         } catch (InterruptedException e) {

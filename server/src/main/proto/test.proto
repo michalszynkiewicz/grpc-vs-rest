@@ -7,6 +7,8 @@ option java_package = "com.example.grpcbench";
 
 service Consumer {
   rpc Consume(RecordList) returns (RecordList);
+
+  rpc ConsumeStream(stream RecordList) returns (stream RecordList);
 }
 
 message RecordList {

@@ -36,7 +36,6 @@ public class ReactiveGreetingResource {
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     @Consumes(MediaType.APPLICATION_JSON)
-    @Blocking
     public RestDto hello(RestDto restDto) {
         return response;
     }
